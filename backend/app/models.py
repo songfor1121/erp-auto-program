@@ -18,6 +18,9 @@ class Company(Base):
     discount_rules = relationship("DiscountRule", back_populates="company")
     erp_mappings = relationship("ERPMapping", back_populates="company")
     documents = relationship("Document", back_populates="company")
+    document_field_locations = relationship("DocumentFieldLocation", back_populates="company")
+    field_aliases = relationship("FieldAlias", back_populates="company")
+    document_samples = relationship("DocumentSample", back_populates="company")
 
 class FieldRule(Base):
     __tablename__ = "field_rules"
@@ -93,3 +96,49 @@ class ExtractedItem(Base):
     validation_status = Column(String, default="PENDING")
 
     document = relationship("Document", back_populates="extracted_items")
+
+class DocumentFieldLocation(Base):
+    __tablename__ = "document_field_locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    field_name = Column(String, nullable=False)
+    document_label = Column(String, nullable=True)
+    location_area = Column(String, nullable=True)
+    location_detail = Column(String, nullable=True)
+    anchor_text = Column(String, nullable=True)
+    table_name = Column(String, nullable=True)
+    column_header = Column(String, nullable=True)
+    handwritten = Column(Boolean, default=False)
+    printed = Column(Boolean, default=True)
+    priority = Column(Integer, default=1)
+    notes = Column(String, nullable=True)
+
+    company = relationship("Company", back_populates="document_field_locations")
+
+class FieldAlias(Base):
+    __tablename__ = "field_aliases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    field_name = Column(String, nullable=False)
+    document_label = Column(String, nullable=True)
+    alias = Column(String, nullable=False)
+    example_value = Column(String, nullable=True)
+    priority = Column(Integer, default=1)
+    notes = Column(String, nullable=True)
+
+    company = relationship("Company", back_populates="field_aliases")
+
+class DocumentSample(Base):
+    __tablename__ = "document_samples"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    sample_name = Column(String, nullable=False)
+    document_type = Column(String, nullable=False) # e.g., PDF, IMAGE
+    pdf_type = Column(String, nullable=True) # e.g., TEXT_PDF, IMAGE_PDF, MULTI_PAGE_PDF
+    description = Column(String, nullable=True)
+    active = Column(Boolean, default=True)
+
+    company = relationship("Company", back_populates="document_samples")
