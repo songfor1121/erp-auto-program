@@ -18,16 +18,13 @@ class LineItem(BaseModel):
     unit_quantity: Optional[FieldData] = None
     unit_price: Optional[FieldData] = None
     supply_amount: Optional[FieldData] = None
-    discount_rate: Optional[FieldData] = None
 
 class HeaderFields(BaseModel):
     order_type: Optional[FieldData] = None
     vendor: Optional[FieldData] = None
     expected_receipt_date: Optional[FieldData] = None
     discount_rate: Optional[FieldData] = None
-    order_number: Optional[FieldData] = None
     transaction_date: Optional[FieldData] = None
-    company_name: Optional[FieldData] = None
 
 class DocumentExtractionResponse(BaseModel):
     document_id: int

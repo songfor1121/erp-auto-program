@@ -18,9 +18,9 @@ class Pipeline:
         # Step 2: Map Fields (Standard Field Mapping)
         mapped_data = FieldMapper.map_fields(db, company_id, {})
 
-        # Separate headers and line items
-        header_keys = ["order_type", "vendor", "expected_receipt_date", "discount_rate"]
-        header = {k: mapped_data.get(k) for k in header_keys}
+        # Separate headers and line items (Updated to phase 4 rules)
+        header_keys = ["order_type", "vendor", "expected_receipt_date", "discount_rate", "transaction_date"]
+        header = {k: mapped_data.get(k) for k in header_keys if k in mapped_data}
         items = mapped_data.get("items", [])
 
         structured_data = {
@@ -46,13 +46,24 @@ class Pipeline:
                 if norm_val is None:
                     norm_val = raw_val
 
+                # Auto-confirm based on confidence & validation rules.
+                # If validation_status is already set to NEEDS_REVIEW or ERROR, leave it.
+                # Otherwise, if confidence > 0.90, auto CONFIRMED.
+                conf = field_dict.get("confidence", 0)
+                status = field_dict.get("validation_status", "PENDING")
+                if status == "PENDING":
+                    if conf > 0.90:
+                        status = "CONFIRMED"
+                    else:
+                        status = "NEEDS_REVIEW"
+
                 item = ExtractedItem(
                     document_id=document_id,
                     field_name=field_name,
                     raw_value=raw_val,
                     normalized_value=norm_val,
-                    confidence=field_dict.get("confidence"),
-                    validation_status=field_dict.get("validation_status", "PENDING"),
+                    confidence=conf,
+                    validation_status=status,
                     validation_message=field_dict.get("validation_message", ""),
                     source=field_dict.get("source", "AI")
                 )
@@ -64,7 +75,7 @@ class Pipeline:
             parent_item = ExtractedItem(
                 document_id=document_id,
                 field_name="line_item",
-                validation_status="PENDING",
+                validation_status="CONFIRMED", # container is always confirmed
                 source="SYSTEM"
             )
             db.add(parent_item)
@@ -77,14 +88,22 @@ class Pipeline:
                     if norm_val is None:
                         norm_val = raw_val
 
+                    conf = field_dict.get("confidence", 0)
+                    status = field_dict.get("validation_status", "PENDING")
+                    if status == "PENDING":
+                        if conf > 0.90:
+                            status = "CONFIRMED"
+                        else:
+                            status = "NEEDS_REVIEW"
+
                     child_item = ExtractedItem(
                         document_id=document_id,
                         field_name=field_name,
                         parent_id=parent_item.id,
                         raw_value=raw_val,
                         normalized_value=norm_val,
-                        confidence=field_dict.get("confidence"),
-                        validation_status=field_dict.get("validation_status", "PENDING"),
+                        confidence=conf,
+                        validation_status=status,
                         validation_message=field_dict.get("validation_message", ""),
                         source=field_dict.get("source", "AI")
                     )

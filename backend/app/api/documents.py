@@ -159,3 +159,49 @@ def update_item_field(document_id: int, item_index: int, field_name: str, update
 
     db.commit()
     return get_document_data(document_id, db)
+
+@router.get("/{document_id}/erp-mapping")
+def get_erp_mapping(document_id: int, db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    extracted_items = db.query(ExtractedItem).filter(ExtractedItem.document_id == document_id).all()
+
+    # Check if there are any fields needing review
+    needs_review_items = [i for i in extracted_items if i.validation_status == "NEEDS_REVIEW"]
+    if needs_review_items:
+        raise HTTPException(status_code=400, detail="Cannot map to ERP while fields are in NEEDS_REVIEW status.")
+
+    header_fields = {}
+    items = []
+
+    line_item_parents = [i for i in extracted_items if i.field_name == "line_item" and i.parent_id is None]
+
+    for item in extracted_items:
+        if item.parent_id is None and item.field_name != "line_item":
+            header_fields[item.field_name] = item.normalized_value
+
+    for parent in line_item_parents:
+        children = [i for i in extracted_items if i.parent_id == parent.id]
+        item_dict = {}
+        for child in children:
+            item_dict[child.field_name] = child.normalized_value
+        items.append(item_dict)
+
+    return {
+        "document_id": document_id,
+        "erp_header": header_fields,
+        "erp_items": items
+    }
+
+@router.post("/{document_id}/submit-erp")
+def submit_to_erp(document_id: int, db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    doc.status = "ERP_SUBMITTED"
+    db.commit()
+
+    return {"message": "Success"}

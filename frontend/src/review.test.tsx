@@ -34,6 +34,7 @@ describe('ReviewField', () => {
   it('renders low confidence field with warning', () => {
     render(<ReviewField docId={1} label="회사명" fieldName="company_name" data={mockNeedsReviewData} onDataUpdated={jest.fn()} />);
     expect(screen.getByText(/확인 필요/)).toBeInTheDocument();
+    expect(screen.getByText('Low confidence')).toBeInTheDocument();
   });
 
   it('calls update API on blur when value changed', async () => {
