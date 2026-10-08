@@ -61,17 +61,40 @@ class DiscountRule(Base):
 
     company = relationship("Company", back_populates="discount_rules")
 
+class ERPFieldSchema(Base):
+    __tablename__ = "erp_field_schemas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    erp_field_id = Column(String, nullable=False, unique=True) # e.g. 'order_number', 'vendor'
+    display_name = Column(String, nullable=False) # e.g. '수주번호', '거래처'
+    data_type = Column(String, nullable=False)
+    is_required = Column(Boolean, default=False)
+    source_type = Column(String, nullable=False) # document_extraction, company_rule, calculation, erp_master, user_input, future_api
+    is_active = Column(Boolean, default=True)
+
+    mappings = relationship("ERPMapping", back_populates="erp_field")
+
+class StandardField(Base):
+    __tablename__ = "standard_fields"
+
+    id = Column(Integer, primary_key=True, index=True)
+    field_name = Column(String, nullable=False, unique=True) # e.g. 'order_number', 'item_number'
+
+    mappings = relationship("ERPMapping", back_populates="standard_field")
+
 class ERPMapping(Base):
     __tablename__ = "erp_mappings"
 
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"))
-    source_field = Column(String, nullable=False)
-    erp_field = Column(String, nullable=False)
+    standard_field_id = Column(Integer, ForeignKey("standard_fields.id"))
+    erp_field_id = Column(Integer, ForeignKey("erp_field_schemas.id"))
     enabled = Column(Boolean, default=True)
     transform_rule = Column(String, nullable=True)
 
     company = relationship("Company", back_populates="erp_mappings")
+    standard_field = relationship("StandardField", back_populates="mappings")
+    erp_field = relationship("ERPFieldSchema", back_populates="mappings")
 
 class Document(Base):
     __tablename__ = "documents"
@@ -90,12 +113,17 @@ class ExtractedItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"))
+    field_name = Column(String, nullable=False) # e.g., 'company_name', 'transaction_date', 'item_number'
+    parent_id = Column(Integer, ForeignKey("extracted_items.id"), nullable=True) # For line items
     raw_value = Column(String, nullable=True)
     normalized_value = Column(String, nullable=True)
     confidence = Column(Float, nullable=True)
     validation_status = Column(String, default="PENDING")
+    validation_message = Column(String, nullable=True)
+    source = Column(String, nullable=True) # e.g., 'OCR', 'AI', 'USER'
 
     document = relationship("Document", back_populates="extracted_items")
+    parent = relationship("ExtractedItem", remote_side=[id])
 
 class DocumentFieldLocation(Base):
     __tablename__ = "document_field_locations"

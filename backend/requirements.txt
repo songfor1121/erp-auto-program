@@ -3,4 +3,5 @@ uvicorn
 sqlalchemy
 pydantic
 pytest
-httpx
+httpxpython-multipart
+aiofiles
