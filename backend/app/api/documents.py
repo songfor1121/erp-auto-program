@@ -3,12 +3,13 @@ import shutil
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from app.schemas.document import DocumentUploadResponse, DocumentExtractionResponse, UpdateFieldRequest
 from app.services.ocr_service import OCRService
 from app.services.pipeline import Pipeline
 from app.database import get_db
-from app.models import Document, ExtractedItem
+from app.models import Document, ExtractedItem, ProductDictionary, ProductDictionaryHistory
 
 router = APIRouter()
 
@@ -21,7 +22,6 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-    # Save document record first to get ID
     new_doc = Document(image_url=file.filename)
     db.add(new_doc)
     db.commit()
@@ -39,7 +39,6 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Phase 2 Pipeline runs and writes directly to DB
     raw_text = OCRService.process(file_path)
     Pipeline.process_document(db, doc_id, raw_text)
 
@@ -51,13 +50,11 @@ def get_document_data(document_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Reconstruct nested dictionary response from flat DB table
     header_fields = {}
     items = []
 
     extracted_items = db.query(ExtractedItem).filter(ExtractedItem.document_id == document_id).all()
 
-    # Separate parent line items
     line_item_parents = [i for i in extracted_items if i.field_name == "line_item" and i.parent_id is None]
 
     for item in extracted_items:
@@ -106,14 +103,15 @@ def update_document_field(document_id: int, field_name: str, update: UpdateField
 
     doc_item.normalized_value = update.normalized_value
     doc_item.source = update.source
+    doc_item.validation_status = update.validation_status
 
-    # Re-validate the single field dictionary logic
     field_dict = {
         "normalized_value": doc_item.normalized_value,
         "confidence": doc_item.confidence,
-        "validation_status": update.validation_status,
+        "validation_status": doc_item.validation_status,
+        "source": doc_item.source
     }
-    Validator._validate_field(field_dict, field_name)
+    Validator._validate_field(field_dict, field_name, skip_confidence=True)
 
     doc_item.validation_status = field_dict.get("validation_status")
     doc_item.validation_message = field_dict.get("validation_message")
@@ -123,7 +121,6 @@ def update_document_field(document_id: int, field_name: str, update: UpdateField
 
 @router.put("/{document_id}/items/{item_index}/{field_name}")
 def update_item_field(document_id: int, item_index: int, field_name: str, update: UpdateFieldRequest, db: Session = Depends(get_db)):
-    # We must find the nth parent line item, then find its child field
     parents = db.query(ExtractedItem).filter(
         ExtractedItem.document_id == document_id,
         ExtractedItem.field_name == "line_item",
@@ -145,19 +142,65 @@ def update_item_field(document_id: int, item_index: int, field_name: str, update
 
     doc_item.normalized_value = update.normalized_value
     doc_item.source = update.source
+    doc_item.validation_status = update.validation_status
 
-    # Re-validate the single field dictionary logic
     field_dict = {
         "normalized_value": doc_item.normalized_value,
         "confidence": doc_item.confidence,
-        "validation_status": update.validation_status,
+        "validation_status": doc_item.validation_status,
+        "source": doc_item.source
     }
-    Validator._validate_field(field_dict, field_name)
+    Validator._validate_field(field_dict, field_name, skip_confidence=True)
 
     doc_item.validation_status = field_dict.get("validation_status")
     doc_item.validation_message = field_dict.get("validation_message")
 
     db.commit()
+
+    if field_name == "item_number" and doc_item.validation_status == "CONFIRMED":
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        company_id = doc.company_id
+
+        if not company_id:
+            company_id = 1
+
+        raw_item_string = doc_item.raw_value
+        erp_item_number = doc_item.normalized_value
+
+        if raw_item_string:
+            existing_mapping = db.query(ProductDictionary).filter(
+                ProductDictionary.company_id == company_id,
+                ProductDictionary.raw_item_string == raw_item_string
+            ).first()
+
+            if existing_mapping:
+                if existing_mapping.erp_item_number != erp_item_number:
+                    history = ProductDictionaryHistory(
+                        product_id=existing_mapping.id,
+                        previous_erp_item_number=existing_mapping.erp_item_number,
+                        new_erp_item_number=erp_item_number
+                    )
+                    db.add(history)
+
+                    existing_mapping.erp_item_number = erp_item_number
+                    existing_mapping.is_confirmed = True
+                    existing_mapping.frequency += 1
+                    existing_mapping.last_used_at = datetime.utcnow()
+                else:
+                    existing_mapping.is_confirmed = True
+                    existing_mapping.frequency += 1
+                    existing_mapping.last_used_at = datetime.utcnow()
+            else:
+                new_mapping = ProductDictionary(
+                    company_id=company_id,
+                    raw_item_string=raw_item_string,
+                    erp_item_number=erp_item_number,
+                    is_confirmed=True,
+                    frequency=1
+                )
+                db.add(new_mapping)
+            db.commit()
+
     return get_document_data(document_id, db)
 
 @router.get("/{document_id}/erp-mapping")
@@ -168,7 +211,6 @@ def get_erp_mapping(document_id: int, db: Session = Depends(get_db)):
 
     extracted_items = db.query(ExtractedItem).filter(ExtractedItem.document_id == document_id).all()
 
-    # Check if there are any fields needing review
     needs_review_items = [i for i in extracted_items if i.validation_status == "NEEDS_REVIEW"]
     if needs_review_items:
         raise HTTPException(status_code=400, detail="Cannot map to ERP while fields are in NEEDS_REVIEW status.")
@@ -200,6 +242,11 @@ def submit_to_erp(document_id: int, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    extracted_items = db.query(ExtractedItem).filter(ExtractedItem.document_id == document_id).all()
+    needs_review_items = [i for i in extracted_items if i.validation_status == "NEEDS_REVIEW"]
+    if needs_review_items:
+        raise HTTPException(status_code=400, detail="Validation Error: NEEDS_REVIEW fields exist.")
 
     doc.status = "ERP_SUBMITTED"
     db.commit()

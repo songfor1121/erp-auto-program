@@ -170,3 +170,36 @@ class DocumentSample(Base):
     active = Column(Boolean, default=True)
 
     company = relationship("Company", back_populates="document_samples")
+
+class ProductDictionary(Base):
+    __tablename__ = "product_dictionary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    raw_item_string = Column(String, nullable=False)
+    erp_item_number = Column(String, nullable=False)
+    is_confirmed = Column(Boolean, default=False)
+    frequency = Column(Integer, default=1)
+    active = Column(Boolean, default=True)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship("Company", back_populates="product_dictionaries")
+    history = relationship("ProductDictionaryHistory", back_populates="product")
+
+class ProductDictionaryHistory(Base):
+    __tablename__ = "product_dictionary_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("product_dictionary.id"))
+    previous_erp_item_number = Column(String, nullable=True)
+    new_erp_item_number = Column(String, nullable=False)
+    changed_at = Column(DateTime, default=datetime.utcnow)
+    changed_by = Column(String, default="USER")
+
+    product = relationship("ProductDictionary", back_populates="history")
+
+Company.erp_vendor_name = Column(String, nullable=True)
+Company.order_year_prefix = Column(String, nullable=True)
+Company.product_dictionaries = relationship("ProductDictionary", back_populates="company")
+
+FieldRule.is_erp_auto_filled = Column(Boolean, default=False)

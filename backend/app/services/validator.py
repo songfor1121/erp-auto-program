@@ -2,15 +2,25 @@ from datetime import datetime
 
 class Validator:
     @staticmethod
-    def _validate_field(field_data: dict, field_name: str):
+    def _validate_field(field_data: dict, field_name: str, skip_confidence: bool = False):
         if not field_data:
             return
 
         value = field_data.get("normalized_value")
         confidence = field_data.get("confidence")
 
+        # If the source is USER, we should trust the user.
+        source = field_data.get("source", "")
+        if source == "USER":
+             field_data["validation_status"] = "CONFIRMED"
+             field_data["validation_message"] = None
+             return
+
+        if field_data.get("validation_status") == "NEEDS_REVIEW" and not skip_confidence:
+            return
+
         # 1. Check Confidence
-        if confidence is not None and confidence < 0.90:
+        if not skip_confidence and confidence is not None and confidence < 0.90:
             field_data["validation_status"] = "NEEDS_REVIEW"
             field_data["validation_message"] = "신뢰도 낮음"
             return
@@ -35,16 +45,12 @@ class Validator:
                 field_data["validation_message"] = "올바른 날짜 형식(YYYY-MM-DD)이 아님"
                 return
 
-        # If it passes validation and wasn't already marked NEEDS_REVIEW manually (e.g. by missing rule):
-        if field_data.get("validation_status") != "NEEDS_REVIEW":
-            field_data["validation_status"] = "CONFIRMED"
-            field_data["validation_message"] = None
+        # If it passes validation and wasn't already marked NEEDS_REVIEW manually:
+        field_data["validation_status"] = "CONFIRMED"
+        field_data["validation_message"] = None
 
     @staticmethod
     def validate(extracted_data: dict):
-        # Applies data integrity and format validation.
-        # Note: We do NOT calculate or alter amounts here. ERP handles calculations.
-
         if "header" in extracted_data:
             for field_name, field_data in extracted_data["header"].items():
                 Validator._validate_field(field_data, field_name)
