@@ -1,30 +1,17 @@
 import pytest
-from app.models import Company, Document, DiscountRule
+from app.models import Company, Document, DiscountRule, ProductDictionary
 from app.services.pipeline import Pipeline
 from app.services.ocr_service import OCRService
 
 @pytest.fixture
 def mock_alutec_ocr(monkeypatch):
     def mock_process(filepath):
-        return """
-        발주구분: 일반
-        거래처: 알루텍
-        입고예정일: 2026-10-10
-        DC:
-        수주번호: SO-AL-202301
-        품번: AL-998
-        품명: 알루미늄
-        규격: 1000x2000
-        수량: 50
-        단위수량: 1
-        단가: 50000
-        공급가액: 2500000
-        """
+        return "mock text"
     monkeypatch.setattr(OCRService, "process", mock_process)
 
 def test_alutec_pipeline(db_session, mock_alutec_ocr, monkeypatch):
     # Setup company
-    company = Company(company_name="알루텍", active=True)
+    company = Company(company_name="알루텍", erp_vendor_name="알루텍", active=True)
     db_session.add(company)
     db_session.commit()
 
@@ -37,6 +24,10 @@ def test_alutec_pipeline(db_session, mock_alutec_ocr, monkeypatch):
         active=True
     )
     db_session.add(dc_rule)
+
+    # Setup Product Dictionary for Alutec
+    pd = ProductDictionary(company_id=company.id, raw_item_string="AL-998", erp_item_number="도금", is_confirmed=True)
+    db_session.add(pd)
     db_session.commit()
 
     # Setup document
@@ -48,11 +39,11 @@ def test_alutec_pipeline(db_session, mock_alutec_ocr, monkeypatch):
     from app.services.field_mapper import FieldMapper
     def mock_map_fields(db, company_id, raw_document_data):
         return {
-            "vendor": {"raw_value": "알루텍", "confidence": 0.99}, # Phase 4 structure uses vendor
-            "discount_rate": {"raw_value": "", "confidence": 0.90}, # Now in header
+            "vendor": {"raw_value": "알루텍", "confidence": 0.99},
+            "discount_rate": {"raw_value": "", "confidence": 0.90},
             "items": [
                 {
-                    "order_number": {"raw_value": "SO-AL-202301", "confidence": 0.99}, # Now in line item
+                    "order_number": {"raw_value": "SO-AL-202301", "confidence": 0.99},
                     "item_number": {"raw_value": "AL-998", "confidence": 0.99},
                     "specification": {"raw_value": "1000x2000", "confidence": 0.99},
                     "quantity": {"raw_value": "50", "confidence": 0.99},
@@ -74,6 +65,7 @@ def test_alutec_pipeline(db_session, mock_alutec_ocr, monkeypatch):
     # Assert Alutec company identification (using vendor instead of company_name for Phase 4 mock)
     vendor_item = next((i for i in items if i.field_name == "vendor" and i.parent_id is None), None)
     assert vendor_item.raw_value == "알루텍"
+    assert vendor_item.normalized_value == "알루텍"
 
     # Assert DC Rate Rule Application (Rule engine puts it in normalized_value)
     # The rule engine must find the header discount_rate and apply the rule
@@ -84,3 +76,8 @@ def test_alutec_pipeline(db_session, mock_alutec_ocr, monkeypatch):
     supply_item = next((i for i in items if i.field_name == "supply_amount" and i.parent_id is not None), None)
     assert supply_item.raw_value == "2500000"
     assert supply_item.validation_status == "CONFIRMED" # Because confidence > 0.90
+
+    # Assert Alutec product dictionary mapped successfully
+    item_number = next((i for i in items if i.field_name == "item_number" and i.parent_id is not None), None)
+    assert item_number.normalized_value == "도금"
+    assert item_number.source == "product_dictionary"

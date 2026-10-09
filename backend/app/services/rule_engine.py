@@ -32,7 +32,9 @@ class RuleEngine:
             if pd.is_confirmed:
                 if pd.raw_item_string not in pd_lookup:
                     pd_lookup[pd.raw_item_string] = []
-                pd_lookup[pd.raw_item_string].append(pd.erp_item_number)
+                # Don't add duplicates
+                if pd.erp_item_number not in pd_lookup[pd.raw_item_string]:
+                    pd_lookup[pd.raw_item_string].append(pd.erp_item_number)
 
         default_dc = next((r.discount_rate for r in dc_rules if r.item_number == "ALL"), None)
         item_dc_lookup = {r.item_number: r.discount_rate for r in dc_rules if r.item_number != "ALL"}
@@ -66,6 +68,7 @@ class RuleEngine:
                         else:
                             item["order_number"]["normalized_value"] = raw_order
                             item["order_number"]["validation_status"] = "NEEDS_REVIEW"
+                            item["order_number"]["validation_message"] = "수주번호 형식이 불분명합니다."
                             item["order_number"]["confidence"] = 0.0
                     else:
                         item["order_number"]["normalized_value"] = raw_order
