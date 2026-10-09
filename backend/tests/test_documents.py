@@ -31,7 +31,6 @@ def test_invalid_file_type(client):
     assert response.status_code == 400
 
 def test_upload_and_extract(client):
-    # Test valid upload
     response = client.post(
         "/api/v1/documents/upload",
         files={"file": ("test.jpg", b"fake image content", "image/jpeg")}
@@ -41,23 +40,19 @@ def test_upload_and_extract(client):
     assert "document_id" in data
     doc_id = data["document_id"]
 
-    # Test retrieve
     response = client.get(f"/api/v1/documents/{doc_id}")
     assert response.status_code == 200
     doc_data = response.json()
 
-    # The mock mapper extracts "ABC Semiconductor", mapped to "ABC Semiconductor" via company 1
     assert doc_data["header"]["vendor"]["normalized_value"] == "ABC Semiconductor"
     assert len(doc_data["items"]) == 2
 
     assert doc_data["header"]["discount_rate"]["validation_status"] == "CONFIRMED"
 
 def test_update_field(client):
-    # Upload first
     response = client.post("/api/v1/documents/upload", files={"file": ("test.jpg", b"mock", "image/jpeg")})
     doc_id = response.json()["document_id"]
 
-    # Update vendor field
     update_data = {
         "normalized_value": "XYZ Semiconductor",
         "validation_status": "CONFIRMED",
@@ -71,11 +66,9 @@ def test_update_field(client):
     assert doc_data["header"]["vendor"]["validation_status"] == "CONFIRMED"
 
 def test_update_item_field(client):
-    # Upload first
     response = client.post("/api/v1/documents/upload", files={"file": ("test.jpg", b"mock", "image/jpeg")})
     doc_id = response.json()["document_id"]
 
-    # Update quantity of first item
     update_data = {
         "normalized_value": "999",
         "validation_status": "CONFIRMED",
