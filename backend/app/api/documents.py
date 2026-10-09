@@ -39,8 +39,8 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
-    raw_text = OCRService.process(file_path)
-    Pipeline.process_document(db, doc_id, raw_text)
+    ocr_result_or_path = OCRService.process(file_path)
+    Pipeline.process_document(db, doc_id, ocr_result_or_path)
 
     return DocumentUploadResponse(document_id=doc_id, message="File uploaded and processed successfully.")
 

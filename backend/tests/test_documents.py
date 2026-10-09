@@ -46,11 +46,10 @@ def test_upload_and_extract(client):
     assert response.status_code == 200
     doc_data = response.json()
 
-    # The mock mapper extracts "ABC Semiconductor", mapped to "ABC Semiconductor" via company 1
     assert doc_data["header"]["vendor"]["normalized_value"] == "알루텍"
     assert len(doc_data["items"]) == 2
-
-    assert doc_data["header"]["discount_rate"]["validation_status"] == "CONFIRMED"
+    # mock rule sets DC to empty so needs review
+    assert doc_data["header"]["discount_rate"]["validation_status"] == "NEEDS_REVIEW"
 
 def test_update_field(client):
     # Upload first

@@ -1,8 +1,30 @@
+import os
+import json
 from app.schemas.document import DocumentExtractionResponse, HeaderFields, FieldData, LineItem
 
 class AIExtractor:
     @staticmethod
-    def extract(document_id: int, text: str) -> DocumentExtractionResponse:
+    def extract(document_id: int, file_path_or_text: str) -> DocumentExtractionResponse:
+
+        use_mock = os.getenv("USE_MOCK_OCR", "True").lower() in ("true", "1", "yes")
+        api_key = os.getenv("GEMINI_API_KEY")
+
+        if use_mock or not api_key:
+            return AIExtractor._mock_extract(document_id)
+
+        # REAL AI EXTRACTION (Pseudocode until actual dependency and approval)
+        # import google.generativeai as genai
+        # genai.configure(api_key=api_key)
+        # model = genai.GenerativeModel('gemini-1.5-flash')
+        # ... read file ...
+        # response = model.generate_content(...)
+        # return AIExtractor._parse_ai_response(document_id, response.text)
+
+        # Fallback if something goes wrong
+        return AIExtractor._mock_extract(document_id)
+
+    @staticmethod
+    def _mock_extract(document_id: int) -> DocumentExtractionResponse:
         return DocumentExtractionResponse(
             document_id=document_id,
             header=HeaderFields(
