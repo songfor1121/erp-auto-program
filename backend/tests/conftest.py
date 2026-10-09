@@ -1,9 +1,13 @@
+import os
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.database import get_db
 from app.models import Base
+
+# Force mock mode for all tests so we don't accidentally require GEMINI API keys in CI
+os.environ["USE_MOCK_OCR"] = "True"
 
 # Create in-memory SQLite DB for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

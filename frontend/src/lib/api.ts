@@ -35,7 +35,7 @@ export interface DocumentData {
   items: LineItem[];
 }
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export const uploadDocument = async (file: File) => {
   const formData = new FormData();
@@ -46,13 +46,19 @@ export const uploadDocument = async (file: File) => {
     body: formData,
   });
 
-  if (!res.ok) throw new Error("Upload failed");
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "문서 업로드에 실패했습니다.");
+  }
   return res.json();
 };
 
 export const getDocument = async (id: string): Promise<DocumentData> => {
   const res = await fetch(`${API_BASE}/documents/${id}`);
-  if (!res.ok) throw new Error("Failed to fetch document");
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "문서 정보를 불러오는 데 실패했습니다.");
+  }
   return res.json();
 };
 
@@ -77,6 +83,9 @@ export const updateField = async (
     }),
   });
 
-  if (!res.ok) throw new Error("Failed to update field");
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "필드 업데이트에 실패했습니다.");
+  }
   return res.json();
 };

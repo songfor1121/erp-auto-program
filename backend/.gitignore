@@ -10,3 +10,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/.gitignore
+
+# DB and Uploads
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+test_uploads/

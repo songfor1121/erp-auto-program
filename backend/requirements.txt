@@ -3,5 +3,8 @@ uvicorn
 sqlalchemy
 pydantic
 pytest
-httpxpython-multipart
+httpx
+python-multipart
 aiofiles
+google-generativeai
+python-dotenv
